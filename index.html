@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Progress</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, sans-serif; background:#f4f6f8; }
+.page { min-height:100vh; display:none; align-items:center; justify-content:center; }
+.page.active{display:flex;}
+.card{width:420px;background:#fff;padding:24px;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.12);position:relative;}
+.goal-list{max-height:160px;overflow-y:auto;border:1px solid #eee;border-radius:10px;padding:10px;margin-bottom:12px;}
+.goal-input{display:flex;gap:8px;}
+.goal-input input{flex:1;padding:10px;}
+.done-btn{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 24px;border-radius:24px;cursor:pointer;}
+.calendar{width:420px;display:grid;grid-template-columns:repeat(7,1fr);gap:10px;}
+.day{background:#fff;padding:14px;border-radius:10px;text-align:center;cursor:pointer;}
+.day.red{background:#ffadad;}
+.day.yellow{background:#ffe066;}
+.day.green{background:#b7e4c7;}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;}
+.modal-box{background:#fff;width:90%;max-width:460px;padding:20px;border-radius:16px;}
+.status-btn{width:28px;height:28px;border-radius:50%;border:none;cursor:pointer;margin-right:6px;position:relative;}
+.status-btn.selected::after{content:"✔";position:absolute;top:4px;left:7px;font-size:14px;}
+.red{background:#ff6b6b;}
+.yellow{background:#ffd93d;}
+.green{background:#6bcf63;}
+.reason-box{margin-top:6px;}
+.reason-box select,input{width:100%;margin-top:4px;padding:6px;}
+.legend{font-size:13px;margin-bottom:10px;}
+hr{margin:14px 0;}
+
+/* Insights Button */
+.insights-btn{
+  position:fixed;
+  bottom:30px;
+  right:30px;
+  padding:16px 22px;
+  border-radius:50px;
+  background:#111;
+  color:#fff;
+  cursor:pointer;
+  font-weight:bold;
+  font-size:16px;
+  box-shadow:0 4px 12px rgba(0,0,0,.3);
+  z-index:10;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.insights-btn:hover{transform:scale(1.1);box-shadow:0 6px 16px rgba(0,0,0,.4);}
+.insights-btn.pulse {
+  animation: pulse 1.6s infinite;
+}
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow:0 4px 12px rgba(0,0,0,.3); }
+  50% { transform: scale(1.05); box-shadow:0 6px 16px rgba(0,0,0,.4); }
+  100% { transform: scale(1); box-shadow:0 4px 12px rgba(0,0,0,.3); }
+}
+
+canvas{max-width:100%;height:200px;}
+.insight-legend{margin-top:10px;font-size:14px;}
+.insight-legend span{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:3px;vertical-align:middle;}
+#topReasons{
+  margin-top:18px;
+  font-size:14px;
+  text-align:left;
+  background:#f9f9f9;
+  padding:12px;
+  border-radius:10px;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Styled Insights Modal */
+#insightsModal .modal-box {
+  background:#fff;
+  width:90%;
+  max-width:500px;
+  padding:24px;
+  border-radius:20px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.2);
+  text-align:center;
+}
+#insightsModal h4 {
+  font-size:22px;
+  margin-bottom:16px;
+  color:#111;
+}
+#insightButtons button {
+  margin:4px;
+  padding:6px 14px;
+  border:none;
+  border-radius:12px;
+  background:#111;
+  color:#fff;
+  cursor:pointer;
+  font-weight:500;
+  transition:0.2s;
+}
+#insightButtons button:hover {
+  transform:scale(1.05);
+  background:#333;
+}
+</style>
+</head>
+<body>
+
+<!-- MONTHLY GOALS PAGE -->
+<div id="goalsPage" class="page active">
+  <div class="card">
+    <h3>Set your goals for this month</h3>
+    <div id="goalList" class="goal-list"></div>
+    <div class="goal-input">
+      <input id="goalInput" placeholder="Add a goal">
+      <button onclick="addGoal()">+</button>
+    </div>
+    <div class="done-btn" onclick="finishSetup()">Done</div>
+    <button id="startNewMonthBtn" class="insights-btn" onclick="startNewMonth()">Start New Month</button>
+  </div>
+</div>
+
+<!-- CALENDAR PAGE -->
+<div id="calendarPage" class="page">
+  <div id="calendar" class="calendar"></div>
+  <button id="insightsBtn" class="insights-btn" onclick="openInsights()">Insights</button>
+</div>
+
+<!-- DAY MODAL -->
+<div id="dayModal" class="modal">
+  <div class="modal-box">
+    <h4 id="dayTitle"></h4>
+    <div class="legend">🔴 &lt;50% &nbsp; 🟡 &gt;50% &nbsp; 🟢 100%</div>
+    <div id="goalRatings"></div>
+    <hr>
+    <p><strong>Overall day</strong></p>
+    <div id="overallBtns">
+      <button class="status-btn red" onclick="setOverall('red',this)"></button>
+      <button class="status-btn yellow" onclick="setOverall('yellow',this)"></button>
+      <button class="status-btn green" onclick="setOverall('green',this)"></button>
+    </div>
+    <br>
+    <button onclick="saveDay()">Save</button>
+  </div>
+</div>
+
+<!-- INSIGHTS MODAL -->
+<div id="insightsModal" class="modal">
+  <div class="modal-box">
+    <h4>Insights</h4>
+    <div id="insightButtons" style="margin-bottom:10px;"></div>
+    <canvas id="insightChart"></canvas>
+    <div id="insightLegend" class="insight-legend"></div>
+    <div id="topReasons"></div>
+    <br>
+    <button onclick="closeInsights()">Close</button>
+  </div>
+</div>
+
+<script>
+const monthKey = new Date().toISOString().slice(0,7);
+let goals = [];
+let progress = JSON.parse(localStorage.getItem("progress_"+monthKey)) || {};
+let currentDay = null;
+let overallTemp = null;
+const insightsBtn = document.getElementById("insightsBtn");
+
+function addGoal() {
+  const v = goalInput.value.trim();
+  if(!v) return;
+  goals.push(v);
+  renderGoalList();
+  goalInput.value="";
+}
+function renderGoalList() { goalList.innerHTML = goals.map(g=>`<div>• ${g}</div>`).join(""); }
+
+function finishSetup() {
+  if(!goals.length) return alert("Add goals");
+  goalsPage.classList.remove("active");
+  calendarPage.classList.add("active");
+  renderCalendar();
+  checkNewData();
+}
+
+function startNewMonth(){
+  if(confirm("Start a new month? Old data will be cleared.")){
+    localStorage.removeItem("progress_"+monthKey);
+    progress={};
+    goals=[];
+    goalList.innerHTML="";
+    calendar.innerHTML="";
+    goalsPage.classList.add("active");
+    calendarPage.classList.remove("active");
+  }
+}
+
+function renderCalendar(){
+  calendar.innerHTML="";
+  const days = new Date(new Date().getFullYear(), new Date().getMonth()+1,0).getDate();
+  for(let d=1;d<=days;d++){
+    const status=progress[d]?.overall||"";
+    calendar.innerHTML+=`<div class="day ${status}" onclick="openDay(${d})">${d}</div>`;
+  }
+  checkNewData();
+}
+
+function openDay(day){
+  currentDay=day;
+  overallTemp=progress[day]?.overall||null;
+  if(!progress[day]) progress[day]={goals:{},overall:null};
+
+  dayTitle.innerText=`Day ${day}`;
+  goalRatings.innerHTML="";
+  goals.forEach(goal=>{
+    const data=progress[day].goals[goal]||{};
+    const status=data.status||"";
+    let buttons=["red","yellow","green"].map(c=>{
+      return `<button class="status-btn ${c} ${status===c?"selected":""}" onclick="setGoal('${goal}','${c}',this)"></button>`;
+    }).join("");
+    goalRatings.innerHTML+=`
+      <div>
+        <strong>${goal}</strong><br>${buttons}
+        <div class="reason-box" id="reason-${goal}">${status==="red"?reasonHTML(goal,data):""}</div>
+      </div><br>`;
+  });
+
+  document.querySelectorAll("#overallBtns .status-btn").forEach(b=>b.classList.remove("selected"));
+  if(overallTemp) document.querySelector(`#overallBtns .${overallTemp}`).classList.add("selected");
+
+  dayModal.style.display="flex";
+}
+
+function reasonHTML(goal,data){
+  return `<select onchange="setReason('${goal}',this.value)">
+      <option value="">Reason</option>
+      <option ${data.reason==="Procrastination"?"selected":""}>Procrastination</option>
+      <option ${data.reason==="Tired"?"selected":""}>Tired</option>
+      <option ${data.reason==="Urgent work"?"selected":""}>Urgent work</option>
+      <option ${data.reason==="No interest"?"selected":""}>No interest</option>
+      <option ${data.reason==="Other"?"selected":""}>Other</option>
+    </select>
+    <input placeholder="Optional note for Other" value="${data.note||""}" oninput="setNote('${goal}',this.value)">`;
+}
+
+function setGoal(goal,color,btn){
+  progress[currentDay].goals[goal]={status:color};
+  btn.parentNode.querySelectorAll(".status-btn").forEach(b=>b.classList.remove("selected"));
+  btn.classList.add("selected");
+  const box=document.getElementById(`reason-${goal}`);
+  box.innerHTML=color==="red"?reasonHTML(goal,{}):"";
+}
+
+function setReason(goal,val){ progress[currentDay].goals[goal].reason=val; }
+function setNote(goal,val){ progress[currentDay].goals[goal].note=val; }
+
+function setOverall(color,btn){
+  overallTemp=color;
+  document.querySelectorAll("#overallBtns .status-btn").forEach(b=>b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+function saveDay(){
+  if(goals.some(g=>!progress[currentDay].goals[g])) return alert("Rate all goals");
+  if(!overallTemp) return alert("Rate overall day");
+  progress[currentDay].overall=overallTemp;
+  localStorage.setItem("progress_"+monthKey, JSON.stringify(progress));
+  dayModal.style.display="none";
+  renderCalendar();
+}
+
+function openInsights(){
+  insightsModal.style.display="flex";
+  const btnDiv=document.getElementById("insightButtons");
+  btnDiv.innerHTML="<button onclick='renderChart(\"overall\")'>Overall</button>";
+  goals.forEach(g=> btnDiv.innerHTML+=`<button onclick='renderChart("${g}")'>${g}</button>`);
+  renderChart("overall");
+  insightsBtn.classList.remove("pulse");
+}
+
+function closeInsights(){ insightsModal.style.display="none"; }
+
+function renderChart(target){
+  const ctx=document.getElementById("insightChart").getContext("2d");
+  ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+
+  let counts={red:0,yellow:0,green:0};
+  let reasonCounts={};
+  
+  if(target==="overall"){
+    Object.values(progress).forEach(d=>{
+      if(d.overall) counts[d.overall]++;
+      Object.values(d.goals||{}).forEach(g=>{
+        if(g.status==="red"){
+          let reasonText = g.reason==="Other" && g.note ? g.note : g.reason;
+          if(reasonText) reasonCounts[reasonText]=(reasonCounts[reasonText]||0)+1;
+        }
+      });
+    });
+  }else{
+    Object.values(progress).forEach(d=>{
+      if(d.goals[target] && d.goals[target].status==="red"){
+        let g = d.goals[target];
+        let reasonText = g.reason==="Other" && g.note ? g.note : g.reason;
+        if(reasonText) reasonCounts[reasonText]=(reasonCounts[reasonText]||0)+1;
+        counts[g.status]++;
+      } else if(d.goals[target]){
+        counts[d.goals[target].status]++;
+      }
+    });
+  }
+
+  const total=counts.red+counts.yellow+counts.green;
+  if(total===0) return;
+
+  // Draw pie chart
+  const w=ctx.canvas.width,h=ctx.canvas.height;
+  let start=0;
+  ["red","yellow","green"].forEach(c=>{
+    let val=counts[c]/total*2*Math.PI;
+    ctx.fillStyle=c==="red"?"#ff6b6b":c==="yellow"?"#ffd93d":"#6bcf63";
+    ctx.beginPath(); ctx.moveTo(w/2,h/2); ctx.arc(w/2,h/2,Math.min(w,h)/2-10,start,start+val); ctx.closePath(); ctx.fill();
+    start+=val;
+  });
+
+  const legend=document.getElementById("insightLegend");
+  legend.innerHTML=`<span style="background:#ff6b6b"></span> Red: ${counts.red} (${((counts.red/total)*100).toFixed(1)}%) &nbsp;
+                    <span style="background:#ffd93d"></span> Yellow: ${counts.yellow} (${((counts.yellow/total)*100).toFixed(1)}%) &nbsp;
+                    <span style="background:#6bcf63"></span> Green: ${counts.green} (${((counts.green/total)*100).toFixed(1)}%)`;
+
+  const topReasonsDiv=document.getElementById("topReasons");
+  const sortedReasons=Object.entries(reasonCounts).sort((a,b)=>b[1]-a[1]);
+  if(sortedReasons.length){
+    topReasonsDiv.innerHTML="<strong>Top reasons for Red:</strong><br>"+sortedReasons.slice(0,3).map(r=>`${r[0]} (${r[1]})`).join("<br>");
+  } else {
+    topReasonsDiv.innerHTML="";
+  }
+}
+
+// Add subtle pulse to Insights button if new data exists
+function checkNewData(){
+  const anyRed = Object.values(progress).some(d => 
+    Object.values(d.goals||{}).some(g => g.status==="red")
+  );
+  if(anyRed) insightsBtn.classList.add("pulse");
+  else insightsBtn.classList.remove("pulse");
+}
+
+// Initial check
+checkNewData();
+</script>
+
+</body>
+</html>
